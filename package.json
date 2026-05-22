@@ -1,0 +1,13 @@
+{
+  "name": "kodda",
+  "private": true,
+  "type": "module",
+  "piConfig": {
+    "configDir": ".pi"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@sinclair/typebox": "*",
+    "typescript": "^6.0.3"
+  }
+}

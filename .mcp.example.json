@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "fnx-internal-mcp": {
+      "command": "bash",
+      "args": [
+        "<PATH_TO>/start-mcp.sh"
+      ],
+      "lifecycle": "lazy",
+      "directTools": true
+    },
+    "postgres": {
+      "command": "uvx",
+      "args": [
+        "postgres-mcp",
+        "--access-mode=unrestricted"
+      ],
+      "env": {
+        "DATABASE_URI": "postgresql://user:password@localhost:5432/dbname"
+      },
+      "lifecycle": "lazy",
+      "directTools": true
+    }
+  }
+}
