@@ -2,4 +2,5 @@ node_modules/
 .pi/npm/
 .pi/scratch.md
 .pi/sessions/
+.pi/settings.json
 .mcp.json

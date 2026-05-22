@@ -1,13 +1,28 @@
 {
   "name": "kodda",
-  "private": true,
   "type": "module",
-  "piConfig": {
-    "configDir": ".pi"
-  },
-  "devDependencies": {
+  "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
-    "@sinclair/typebox": "*",
-    "typescript": "^6.0.3"
+    "@earendil-works/pi-tui": "*"
+  },
+  "dependencies": {
+    "pi-mcp-adapter": "*",
+    "pi-subagents": "*",
+    "context-mode": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions",
+      "./node_modules/pi-mcp-adapter/index.ts",
+      "./node_modules/pi-subagents/src/extension/index.ts",
+      "./node_modules/context-mode/build/adapters/pi/extension.js"
+    ],
+    "skills": [
+      "./node_modules/pi-subagents/skills",
+      "./node_modules/context-mode/skills"
+    ],
+    "prompts": [
+      "./node_modules/pi-subagents/prompts"
+    ]
   }
 }

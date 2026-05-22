@@ -1,51 +1,40 @@
 # kodda
 
-Personal pi agent harness with MCP and subagent support.
+Personal [pi](https://pi.dev) agent harness — custom footer, safety rails, opusplan, and clarifying questions prompt.
 
-## Setup
+Bundles [pi-mcp-adapter](https://github.com/nicobailon/pi-mcp-adapter), [pi-subagents](https://github.com/nicobailon/pi-subagents), and [context-mode](https://github.com/mksglu/context-mode).
 
-```bash
-npm install          # install TypeScript types for IDE support
-pi install npm:pi-mcp-adapter -l
-pi install npm:pi-subagents -l
-pi install npm:context-mode -l
+## Install
+
+```sh
+pi install git:github.com/happsie/kodda
 ```
 
-## Run
+## MCP servers (one-time)
 
-```bash
-pi              # interactive TUI
-pi -p "..."     # one-shot non-interactive
-pi -c           # continue previous session
+Copy the example config and fill in your values:
+
+```sh
+cp ~/.pi/agent/git/github.com/happsie/kodda/.mcp.example.json ~/.pi/agent/mcp.json
 ```
 
-## Structure
+## Included extensions
 
-```
-.pi/
-  extensions/
-    safety.ts          # blocks dangerous bash commands
-    session-context.ts # injects cwd/date/branch at session start
-    commands.ts        # /scratch  /mcp-status  /agents
-  settings.json        # MCP settings, subagent defaults
-.mcp.json              # MCP server registry
-AGENTS.md              # agent instructions (auto-loaded by pi)
-```
-
-## MCP servers
-
-`fnx-internal-mcp` and `postgres` are pre-configured in `.mcp.json` with `lifecycle: lazy` — they connect only when the agent first calls them.
-
-To point postgres at a different database, set `DATABASE_URI` in your environment before running `pi`.
-
-## Extensions
-
-Add project-specific extensions to `.pi/extensions/*.ts`. They are auto-discovered by pi at startup. Each file must export a default function `(pi: ExtensionAPI) => void`.
-
-## Packages installed
-
-| Package | Purpose |
+| Extension | What it does |
 |---|---|
-| `pi-mcp-adapter` | ~200-token MCP proxy; lazy-loads any MCP server |
-| `pi-subagents` | Delegates tasks to focused child agents |
-| `context-mode` | Sandboxed tool output; FTS5 knowledge base |
+| `footer.ts` | Status bar: cwd · branch [↑↓] · diff stats · context usage · model |
+| `safety.ts` | Blocks dangerous commands (`rm -rf /`, force-push to main, etc.) |
+| `commands.ts` | `/scratch`, `/mcp-status`, `/agents`, `/opusplan` |
+| `opusplan.ts` | Plan with Opus 4.7, execute with Sonnet 4.6 |
+| `system.ts` | Injects clarifying-questions instructions into every session |
+
+## Recommended global settings
+
+Add to `~/.pi/agent/settings.json`:
+
+```json
+{
+  "mcp": { "toolPrefix": "short", "autoAuth": true, "idleTimeout": 10 },
+  "subagents": { "defaultModel": "inherit", "worktreeIsolation": true }
+}
+```

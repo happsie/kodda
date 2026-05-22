@@ -1,7 +1,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 const PLAN_TOOLS = ["read", "bash", "grep", "find", "ls", "mcp"];
-const PROVIDER = "anthropic";
+const PROVIDER = "github-copilot";
 const PLAN_MODEL = "claude-opus-4-7";
 const EXEC_MODEL = "claude-sonnet-4-6";
 

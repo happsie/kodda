@@ -8,6 +8,10 @@
     "defaultModel": "inherit",
     "worktreeIsolation": true
   },
+  "skills": [
+    "/Users/jesper.nilsson/.claude/plugins/cache/pengapallen-marketplace/fnx-bootstrap/b801b2b6a777/skills",
+    "/Users/jesper.nilsson/.claude/plugins/cache/pengapallen-marketplace/fnx-misc-commands/b801b2b6a777/skills"
+  ],
   "packages": [
     "npm:pi-mcp-adapter",
     "npm:pi-subagents",

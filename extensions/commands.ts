@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { appendFileSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { appendFileSync, readFileSync, existsSync } from "node:fs";
+import { resolve, join } from "node:path";
+import { homedir } from "node:os";
 
 const SUBAGENT_ROLES = [
   "scout",
@@ -39,12 +40,21 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.registerCommand("mcp-status", {
-    description: "Show configured MCP servers from .mcp.json",
+    description: "Show configured MCP servers",
     handler: async (_args, ctx) => {
-      const configPath = resolve(ctx.cwd ?? process.cwd(), ".mcp.json");
+      const candidates = [
+        join(homedir(), ".config", "mcp", "mcp.json"),
+        join(homedir(), ".pi", "agent", "mcp.json"),
+        resolve(ctx.cwd ?? process.cwd(), ".mcp.json"),
+        resolve(ctx.cwd ?? process.cwd(), ".pi", "mcp.json"),
+      ];
+      const configPath = candidates.find(existsSync);
+      if (!configPath) {
+        ctx.ui.notify("No MCP config found", "warning");
+        return;
+      }
       try {
-        const raw = readFileSync(configPath, "utf8");
-        const data = JSON.parse(raw) as {
+        const data = JSON.parse(readFileSync(configPath, "utf8")) as {
           mcpServers?: Record<string, unknown>;
         };
         const names = Object.keys(data.mcpServers ?? {});
@@ -55,7 +65,7 @@ export default function (pi: ExtensionAPI) {
           "info"
         );
       } catch {
-        ctx.ui.notify("Could not read .mcp.json", "warning");
+        ctx.ui.notify("Could not read MCP config", "warning");
       }
     },
   });

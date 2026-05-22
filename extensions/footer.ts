@@ -7,6 +7,7 @@ import type {
 import { homedir } from "node:os";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { execSync } from "node:child_process";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
 const BAR_WIDTH = 10;
@@ -37,6 +38,50 @@ export default function (pi: ExtensionAPI) {
   let cwd = "";
   let triggerRender: (() => void) | null = null;
   let footerData: ReadonlyFooterDataProvider | null = null;
+  let diffStats: { added: number; removed: number; files: number } | null = null;
+  let aheadBehind: { ahead: number; behind: number } | null = null;
+
+  function refreshAheadBehind(): void {
+    if (!cwd) return;
+    try {
+      const out = execSync("git rev-list --left-right --count HEAD...@{u}", {
+        cwd,
+        encoding: "utf-8",
+        timeout: 2000,
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+      const [aheadStr, behindStr] = out.split("\t");
+      const ahead = parseInt(aheadStr, 10);
+      const behind = parseInt(behindStr, 10);
+      aheadBehind = { ahead: isNaN(ahead) ? 0 : ahead, behind: isNaN(behind) ? 0 : behind };
+    } catch {
+      aheadBehind = null;
+    }
+  }
+
+  function refreshDiffStats(): void {
+    if (!cwd) return;
+    try {
+      const out = execSync("git diff HEAD --shortstat", {
+        cwd,
+        encoding: "utf-8",
+        timeout: 2000,
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+      if (!out) { diffStats = null; return; }
+      // " 3 files changed, 42 insertions(+), 7 deletions(-)"
+      const filesMatch = out.match(/(\d+) files? changed/);
+      const addedMatch = out.match(/(\d+) insertion/);
+      const removedMatch = out.match(/(\d+) deletion/);
+      diffStats = {
+        files: filesMatch ? parseInt(filesMatch[1], 10) : 0,
+        added: addedMatch ? parseInt(addedMatch[1], 10) : 0,
+        removed: removedMatch ? parseInt(removedMatch[1], 10) : 0,
+      };
+    } catch {
+      diffStats = null;
+    }
+  }
 
   const SEP = "   ·   ";
 
@@ -47,7 +92,25 @@ export default function (pi: ExtensionAPI) {
     if (cwd) leftParts.push(cwd.replace(homedir(), "~"));
 
     const branch = footerData?.getGitBranch();
-    if (branch && branch !== "detached") leftParts.push(`⎇ ${branch}`);
+    if (branch && branch !== "detached") {
+      let branchStr = `⎇ ${branch}`;
+      if (aheadBehind != null) {
+        const abParts: string[] = [];
+        if (aheadBehind.ahead > 0) abParts.push(theme.fg("success", `↑${aheadBehind.ahead}`));
+        else abParts.push(theme.fg("dim", "↑0"));
+        if (aheadBehind.behind > 0) abParts.push(theme.fg("warning", `↓${aheadBehind.behind}`));
+        else abParts.push(theme.fg("dim", "↓0"));
+        branchStr += ` [${abParts.join(" ")}]`;
+      }
+      if (diffStats && (diffStats.added > 0 || diffStats.removed > 0 || diffStats.files > 0)) {
+        const statParts: string[] = [];
+        if (diffStats.added > 0) statParts.push(theme.fg("toolDiffAdded", `+${diffStats.added}`));
+        if (diffStats.removed > 0) statParts.push(theme.fg("toolDiffRemoved", `-${diffStats.removed}`));
+        if (diffStats.files > 0) statParts.push(theme.fg("dim", `~${diffStats.files}`));
+        branchStr += `  ${statParts.join(" ")}`;
+      }
+      leftParts.push(branchStr);
+    }
 
     const rightParts: string[] = [];
 
@@ -134,6 +197,8 @@ export default function (pi: ExtensionAPI) {
     cachedUsage = ctx.getContextUsage();
     cwd = ctx.cwd;
     if (ctx.model) modelLabel = `${ctx.model.provider} / ${ctx.model.name}`;
+    refreshDiffStats();
+    refreshAheadBehind();
 
     if (!ctx.hasUI) return;
 
@@ -141,7 +206,11 @@ export default function (pi: ExtensionAPI) {
       footerData = fd;
       triggerRender = () => tui.requestRender();
 
-      const unsubBranch = fd.onBranchChange(() => tui.requestRender());
+      const unsubBranch = fd.onBranchChange(() => {
+        refreshDiffStats();
+        refreshAheadBehind();
+        tui.requestRender();
+      });
 
       return {
         render(width: number): string[] {
@@ -171,6 +240,8 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("message_end", (_e, ctx) => {
     cachedUsage = ctx.getContextUsage();
+    refreshDiffStats();
+    refreshAheadBehind();
     triggerRender?.();
   });
 
