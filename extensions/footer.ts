@@ -5,30 +5,22 @@ import type {
   ReadonlyFooterDataProvider,
 } from "@earendil-works/pi-coding-agent";
 import { homedir } from "node:os";
-import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
-const BAR_WIDTH = 10;
+const BAR_WIDTH = 12;
 
-function bar(pct: number): string {
+function bar(pct: number, theme: any): string {
   const f = Math.round((pct / 100) * BAR_WIDTH);
-  return "▓".repeat(f) + "░".repeat(BAR_WIDTH - f);
+  const empty = BAR_WIDTH - f;
+  const color = pct >= 80 ? "error" : pct >= 50 ? "warning" : "success";
+  return theme.fg(color, "█".repeat(f)) + theme.fg("dim", "░".repeat(empty));
 }
 
 function fmtK(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
   return String(n);
-}
-
-function getMcpCachePath(): string {
-  const dir = process.env.PI_CODING_AGENT_DIR?.trim();
-  if (!dir) return join(homedir(), ".pi", "agent", "mcp-cache.json");
-  if (dir === "~") return join(homedir(), "mcp-cache.json");
-  if (dir.startsWith("~/")) return join(homedir(), dir.slice(2), "mcp-cache.json");
-  return join(dir, "mcp-cache.json");
 }
 
 export default function (pi: ExtensionAPI) {
@@ -69,7 +61,6 @@ export default function (pi: ExtensionAPI) {
         stdio: ["ignore", "pipe", "ignore"],
       }).trim();
       if (!out) { diffStats = null; return; }
-      // " 3 files changed, 42 insertions(+), 7 deletions(-)"
       const filesMatch = out.match(/(\d+) files? changed/);
       const addedMatch = out.match(/(\d+) insertion/);
       const removedMatch = out.match(/(\d+) deletion/);
@@ -83,32 +74,38 @@ export default function (pi: ExtensionAPI) {
     }
   }
 
-  const SEP = "   ·   ";
+  const DOT = " · ";
 
-  // Row 1: cwd · branch ············ context bar   provider / model
-  function buildStatusLine(width: number, theme: any): string {
+  // ── Row 1: 📂 cwd  ⎇ branch [↑N ↓N]  +N -N ················· bar N%  Nk/Nk
+  function buildLocationLine(width: number, theme: any): string {
     const leftParts: string[] = [];
 
-    if (cwd) leftParts.push(cwd.replace(homedir(), "~"));
+    if (cwd) {
+      const short = cwd.replace(homedir(), "~");
+      leftParts.push(theme.fg("mdCode", `📂 ${short}`));
+    }
 
     const branch = footerData?.getGitBranch();
     if (branch && branch !== "detached") {
-      let branchStr = `⎇ ${branch}`;
+      let branchStr = theme.fg("accent", `⎇  ${branch}`);
+
       if (aheadBehind != null) {
-        const abParts: string[] = [];
-        if (aheadBehind.ahead > 0) abParts.push(theme.fg("success", `↑${aheadBehind.ahead}`));
-        else abParts.push(theme.fg("dim", "↑0"));
-        if (aheadBehind.behind > 0) abParts.push(theme.fg("warning", `↓${aheadBehind.behind}`));
-        else abParts.push(theme.fg("dim", "↓0"));
-        branchStr += ` [${abParts.join(" ")}]`;
+        const up = aheadBehind.ahead > 0
+          ? theme.fg("success", `↑${aheadBehind.ahead}`)
+          : theme.fg("dim", "↑0");
+        const down = aheadBehind.behind > 0
+          ? theme.fg("warning", `↓${aheadBehind.behind}`)
+          : theme.fg("dim", "↓0");
+        branchStr += theme.fg("dim", " [") + up + theme.fg("dim", " ") + down + theme.fg("dim", "]");
       }
-      if (diffStats && (diffStats.added > 0 || diffStats.removed > 0 || diffStats.files > 0)) {
-        const statParts: string[] = [];
-        if (diffStats.added > 0) statParts.push(theme.fg("toolDiffAdded", `+${diffStats.added}`));
-        if (diffStats.removed > 0) statParts.push(theme.fg("toolDiffRemoved", `-${diffStats.removed}`));
-        if (diffStats.files > 0) statParts.push(theme.fg("dim", `~${diffStats.files}`));
-        branchStr += `  ${statParts.join(" ")}`;
+
+      if (diffStats && (diffStats.added > 0 || diffStats.removed > 0)) {
+        if (diffStats.added > 0)
+          branchStr += "  " + theme.fg("toolDiffAdded", `+${diffStats.added}`);
+        if (diffStats.removed > 0)
+          branchStr += " " + theme.fg("toolDiffRemoved", `-${diffStats.removed}`);
       }
+
       leftParts.push(branchStr);
     }
 
@@ -116,80 +113,91 @@ export default function (pi: ExtensionAPI) {
 
     if (cachedUsage?.percent != null) {
       const pct = Math.round(cachedUsage.percent);
-      const tokens =
-        cachedUsage.tokens != null
-          ? `${fmtK(cachedUsage.tokens)}/${fmtK(cachedUsage.contextWindow)}`
-          : fmtK(cachedUsage.contextWindow);
-      rightParts.push(`${bar(pct)} ${pct}%  ${tokens}`);
+      const pctColor = pct >= 80 ? "error" : pct >= 50 ? "warning" : "success";
+      const tokens = cachedUsage.tokens != null
+        ? theme.fg("muted", `${fmtK(cachedUsage.tokens)}/${fmtK(cachedUsage.contextWindow)}`)
+        : theme.fg("muted", fmtK(cachedUsage.contextWindow));
+      rightParts.push(`${bar(pct, theme)} ${theme.fg(pctColor, `${pct}%`)}  ${tokens}`);
     }
 
-    if (modelLabel) rightParts.push(theme.fg("dim", modelLabel));
-
-    const left = leftParts.join(SEP);
-    const right = rightParts.join(SEP);
+    const left = leftParts.join(theme.fg("dim", DOT));
+    const right = rightParts.join(theme.fg("dim", DOT));
 
     if (!left && !right) return "";
     if (!right) return left;
     if (!left) return right;
 
-    const leftWidth = visibleWidth(left);
-    const rightWidth = visibleWidth(right);
-
-    if (leftWidth + 2 + rightWidth >= width) {
-      return truncateToWidth(left, width - rightWidth - 2, "…") + "  " + right;
+    const lw = visibleWidth(left);
+    const rw = visibleWidth(right);
+    if (lw + 2 + rw >= width) {
+      return truncateToWidth(left, width - rw - 2, "…") + "  " + right;
     }
-
-    const pad = " ".repeat(width - leftWidth - rightWidth);
-    return left + pad + right;
+    return left + " ".repeat(width - lw - rw) + right;
   }
 
-  // Row 2: MCP  server-name (n)  ·  server-name (n)
-  function buildMcpLine(theme: any): string {
-    const cachePath = getMcpCachePath();
-    if (!existsSync(cachePath)) return "";
-    try {
-      const cache = JSON.parse(readFileSync(cachePath, "utf-8"));
-      const servers: Record<string, { tools?: unknown[] }> = cache?.servers ?? {};
-      const parts = Object.entries(servers)
-        .filter(([, entry]) => (entry?.tools?.length ?? 0) > 0)
-        .map(([name, entry]) => `${name} (${entry.tools!.length})`);
-      if (parts.length === 0) return "";
-      const title = theme.bold(theme.fg("accent", "Connected MCPs"));
-      return `${title}  ${parts.join("  ·  ")}`;
-    } catch {
-      return "";
+  // ── Row 2: ⚙ N  tool·N  tool·N  … ···················· provider / model
+  function buildToolsLine(width: number, theme: any): string {
+    const rightParts: string[] = [];
+    if (modelLabel) {
+      const [provider, ...rest] = modelLabel.split(" / ");
+      const modelName = rest.join(" / ");
+      rightParts.push(
+        theme.fg("dim", provider + " / ") + theme.fg("accent", modelName)
+      );
     }
-  }
 
-  // Row 3: ⚙ total  tool×n  tool×n  ...
-  function buildToolLine(width: number): string {
-    if (toolCounts.size === 0) return "";
+    const leftParts: string[] = [];
 
-    const total = [...toolCounts.values()].reduce((a, b) => a + b, 0);
-    const sorted = [...toolCounts.entries()].sort((a, b) => b[1] - a[1]);
-    const prefix = `⚙ ${total}  `;
-    const budget = width - prefix.length;
+    if (toolCounts.size > 0) {
+      const total = [...toolCounts.values()].reduce((a, b) => a + b, 0);
+      leftParts.push(theme.fg("mdHeading", "⚙") + " " + theme.fg("syntaxNumber", String(total)));
 
-    const labels: string[] = [];
-    let used = 0;
-    let remaining = sorted.length;
+      const sorted = [...toolCounts.entries()].sort((a, b) => b[1] - a[1]);
+      const rightStr = rightParts.join(theme.fg("dim", DOT));
+      const prefix = visibleWidth(leftParts[0]) + 2; // "⚙ N  "
+      const budget = width - prefix - visibleWidth(rightStr) - 4;
 
-    for (const [name, n] of sorted) {
-      remaining--;
-      const label = n > 1 ? `${name}×${n}` : name;
-      const suffix = remaining > 0 ? `  +${remaining} more` : "";
-      const needed = (labels.length > 0 ? 2 : 0) + label.length + suffix.length;
+      let used = 0;
+      let remaining = sorted.length;
+      const toolLabels: string[] = [];
 
-      if (used + needed > budget && labels.length > 0) {
-        labels.push(`+${remaining + 1} more`);
-        break;
+      for (const [name, n] of sorted) {
+        remaining--;
+        const plain = n > 1 ? `${name}×${n}` : name;
+        const suffix = remaining > 0 ? `  +${remaining}` : "";
+        const needed = (toolLabels.length > 0 ? visibleWidth(DOT) : 0) + plain.length + suffix.length;
+
+        if (used + needed > budget && toolLabels.length > 0) {
+          toolLabels.push(theme.fg("dim", `+${remaining + 1} more`));
+          break;
+        }
+
+        const colored = n > 1
+          ? theme.fg("mdCode", name) + theme.fg("dim", "×") + theme.fg("syntaxNumber", String(n))
+          : theme.fg("muted", name);
+        toolLabels.push(colored);
+        used += (toolLabels.length > 1 ? visibleWidth(DOT) : 0) + plain.length;
       }
 
-      labels.push(label);
-      used += (labels.length > 1 ? 2 : 0) + label.length;
+      if (toolLabels.length > 0) {
+        leftParts.push(toolLabels.join(theme.fg("dim", DOT)));
+      }
+    } else if (rightParts.length === 0) {
+      return "";
     }
 
-    return prefix + labels.join("  ");
+    const left = leftParts.join("  ");
+    const right = rightParts.join(theme.fg("dim", DOT));
+
+    if (!left) return right;
+    if (!right) return left;
+
+    const lw = visibleWidth(left);
+    const rw = visibleWidth(right);
+    if (lw + 2 + rw >= width) {
+      return truncateToWidth(left, width - rw - 2, "…") + "  " + right;
+    }
+    return left + " ".repeat(width - lw - rw) + right;
   }
 
   pi.on("session_start", (_e, ctx) => {
@@ -215,11 +223,9 @@ export default function (pi: ExtensionAPI) {
       return {
         render(width: number): string[] {
           const lines: string[] = [];
-          const status = buildStatusLine(width, theme);
-          if (status) lines.push(status);
-          const mcp = buildMcpLine(theme);
-          if (mcp) lines.push(mcp);
-          const tools = buildToolLine(width);
+          const loc = buildLocationLine(width, theme);
+          if (loc) lines.push(loc);
+          const tools = buildToolsLine(width, theme);
           if (tools) lines.push(tools);
           return lines;
         },
