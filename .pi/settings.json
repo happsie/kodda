@@ -11,12 +11,5 @@
   "skills": [
     "/Users/jesper.nilsson/.claude/plugins/cache/pengapallen-marketplace/fnx-bootstrap/b801b2b6a777/skills",
     "/Users/jesper.nilsson/.claude/plugins/cache/pengapallen-marketplace/fnx-misc-commands/b801b2b6a777/skills"
-  ],
-  "packages": [
-    "npm:pi-mcp-adapter",
-    "npm:pi-subagents",
-    "npm:context-mode",
-    "npm:@juicesharp/rpiv-btw",
-    "npm:@juicesharp/rpiv-ask-user-question"
   ]
 }
