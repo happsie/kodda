@@ -32,7 +32,6 @@ export default function (pi: ExtensionAPI) {
   let footerData: ReadonlyFooterDataProvider | null = null;
   let diffStats: { added: number; removed: number; files: number } | null = null;
   let aheadBehind: { ahead: number; behind: number } | null = null;
-
   function refreshAheadBehind(): void {
     if (!cwd) return;
     try {
